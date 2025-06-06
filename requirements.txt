@@ -1,4 +1,3 @@
-python-telegram-bot==20.0
-easyocr
-torch
-opencv-python-headless
+python-telegram-bot==20.7
+pytesseract
+Pillow
