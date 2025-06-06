@@ -11,7 +11,7 @@ from ocr import extract_addresses_from_image
 # === Load Config ===
 with open("config.json", "r") as f:
     config = json.load(f)
-    TELEGRAM_BOT_TOKEN = config["7687692663:AAEZx-8Qa_LPA_Lpi-xV-I4ivl9tiQKOFE4"]
+    TELEGRAM_BOT_TOKEN = config["7550311919:AAGRP9MFFFlStdSXLicsBF1xDWGTdrMSJIM"]
 
 # === In-Memory Schedule Context ===
 schedule_data = {}
