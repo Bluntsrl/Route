@@ -1,53 +1,69 @@
-# bot.py
 import os
-import logging
-import easyocr
 import re
+import logging
+import pytesseract
+from PIL import Image
+from io import BytesIO
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
-from urllib.parse import quote_plus
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-# Setup
+# Replace with your bot token
+BOT_TOKEN = "7687692663:AAEZx-8Qa_LPA_Lpi-xV-I4ivl9tiQKOFE4"
+
 logging.basicConfig(level=logging.INFO)
-reader = easyocr.Reader(['en'])  # Downloads model on first run
 
-# Google Maps Route URL
-def create_gmaps_route(addresses):
-    base = "https://www.google.com/maps/dir/"
-    return base + '/'.join([quote_plus(addr) for addr in addresses])
-
-# Extract plausible street addresses (simplified regex)
-def extract_addresses(text_lines):
-    address_pattern = re.compile(r'\d{1,5}\s+\w+(\s\w+)*\s(St|Ave|Blvd|Rd|Ln|Dr|Ct|Way|Pl|Cir|Highway|Hwy)\b', re.IGNORECASE)
-    return [line for line in text_lines if address_pattern.search(line)]
-
-async def handle_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    photo = update.message.photo[-1]
-    file = await context.bot.get_file(photo.file_id)
-    file_path = "image.jpg"
-    await file.download_to_drive(file_path)
-
-    result = reader.readtext(file_path, detail=0)
-    addresses = extract_addresses(result)
-
-    if len(addresses) < 2:
-        await update.message.reply_text("Found less than 2 addresses. Please try a clearer screenshot.")
-        return
-
-    url = create_gmaps_route(addresses)
-    await update.message.reply_text(f"📍 Google Maps Route:\n{url}")
+# Basic U.S. street address regex
+ADDRESS_REGEX = re.compile(
+    r"\d{3,5}\s+[A-Z0-9 .]+(?:RD|ROAD|AVE|AVENUE|ST|STREET|DR|DRIVE|LANE|LN|BLVD|COURT|CT|WAY|CIRCLE|CIR)\b.*",
+    re.IGNORECASE
+)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Send me a screenshot with addresses and I’ll generate a route.")
+    await update.message.reply_text("Send me a screenshot with addresses and I’ll generate a Google Maps route.")
 
-def main():
-    token = os.getenv("BOT_TOKEN")
-    app = ApplicationBuilder().token(token).build()
+def extract_addresses(text: str):
+    lines = text.splitlines()
+    addresses = []
+    buffer = []
+    for line in lines:
+        line = line.strip()
+        if ADDRESS_REGEX.search(line):
+            if buffer:
+                addresses.append(" ".join(buffer))
+                buffer = []
+            buffer.append(line)
+        elif buffer:
+            buffer.append(line)
+    if buffer:
+        addresses.append(" ".join(buffer))
+    return [addr.strip() for addr in addresses if addr.strip()]
 
-    app.add_handler(MessageHandler(filters.TEXT & filters.COMMAND, start))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_image))
+def build_maps_url(addresses):
+    base = "https://www.google.com/maps/dir/"
+    parts = [addr.replace(" ", "+") for addr in addresses]
+    return base + "/".join(parts)
 
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    photo = update.message.photo[-1]
+    photo_file = await photo.get_file()
+    img_bytes = await photo_file.download_as_bytearray()
+    img = Image.open(BytesIO(img_bytes))
+
+    text = pytesseract.image_to_string(img)
+    addresses = extract_addresses(text)
+
+    if not addresses:
+        await update.message.reply_text("I couldn’t find any addresses. Try a clearer screenshot.")
+        return
+
+    maps_url = build_maps_url(addresses)
+    await update.message.reply_text("🗺 Google Maps Route:\n" + maps_url)
+
+if __name__ == '__main__':
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+
+    print("Bot is running...")
     app.run_polling()
-
-if __name__ == "__main__":
-    main()
